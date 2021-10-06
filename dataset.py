@@ -43,7 +43,7 @@ def build_input_from_segments(img_features, caption, tokenizer):
     instance['input_ids'] = input_ids 
     token_type_ids = [img] * len(img_features) + [txt]*len(input_ids)
     instance['token_type_ids'] = token_type_ids 
-    lm_labels = [-1]*len(img_features) + [bos] + caption_id + [eos] 
+    lm_labels = [-100]*len(img_features) + [bos] + caption_id + [eos] 
     instance['lm_labels'] = lm_labels 
     return instance 
 

@@ -18,8 +18,8 @@ device = torch.device('cuda' if use_cuda else 'cpu')
 gpt_model_path = 'model/origin_gpt' 
 ckpt_usage = False 
 
-lr = 6e-5 
-epochs = 1
+lr = 6e-3
+epochs = 10
 gradient_accumulation_steps = 1 
 print_freq = 1 
 
@@ -48,15 +48,29 @@ def main():
 
 def train(model, tokenizer, optimizer, dataset, epoch): 
     model.train() 
+    iteration = 1 
 
     for instance in dataset: 
         instance = tuple(input_tensor.to(device) for input_tensor in instance)
         img_features, input_ids, token_type_ids, lm_labels = instance 
-        input_embs = model.transformer.wte(input_ids)
-        img_embs = model.img_ff(img_features)
-        print(input_embs.size())
-        print(img_embs.size())
-        print(img_features.size())
+        input_emb = model.transformer.wte(input_ids)
+        img_emb = model.img_ff(img_features)
+        input_embs = torch.cat([img_emb, input_emb], dim=-2) 
+
+        #print(input_embs.size())
+        #print(token_type_ids.size())
+        
+        loss = model(input_embs, token_type_ids=token_type_ids, labels=lm_labels)[0]
+        
+        loss.backward() 
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0) 
+
+        if iteration % gradient_accumulation_steps == 0:
+            optimizer.step()
+            optimizer.zero_grad()
+        
+        iteration += 1 
+        print(loss)
         break 
 
 
