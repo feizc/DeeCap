@@ -20,6 +20,9 @@ class SE2Dataset(Dataset):
             self.train_data = json.load(f)['annotations'] 
         self.tokenizer = tokenizer 
 
+    def __len__(self):
+        return len(self.train_data) 
+
     def __getitem__(self, i):
         cap_dict = self.train_data[i]
         img_id = str(cap_dict['image_id']) + '_features' 
