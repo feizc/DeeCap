@@ -1,5 +1,5 @@
-# SE^2
+# DeeCap
 
-Implementation code of Dynamic Early Exit for Image Captioning 
+Implementation code of Dynamic Early Exit for Fast Image Captioning 
 
 
