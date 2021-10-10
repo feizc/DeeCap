@@ -5,8 +5,8 @@ import json
 import numpy as np 
 from torch.utils.data import DataLoader 
 
-from model import SE2Model 
-from dataset import SE2Dataset 
+from model import DeeCapModel 
+from dataset import DeeCapDataset 
 from utils import accuracy_compute, AverageMeter 
 
 
@@ -32,17 +32,17 @@ def main():
         ckpt_path = '' 
     else: 
         tokenizer = GPT2Tokenizer.from_pretrained(gpt_model_path, do_lower_case=True) 
-        model = SE2Model.from_pretrained(gpt_model_path) 
+        model = DeeCapModel.from_pretrained(gpt_model_path) 
         tokenizer.add_special_tokens(SPECIAL_TOKENS_DICT) 
         model.resize_token_embeddings(len(tokenizer)) 
     model = model.to(device) 
     optimizer = AdamW(model.parameters(), lr=lr) 
 
-    dataset = SE2Dataset(train_dataset_path, tokenizer) 
+    
     model = model.to(device) 
     optimizer = AdamW(model.parameters(), lr=lr) 
 
-    train_dataset = SE2Dataset(train_dataset_path, tokenizer) 
+    train_dataset = DeeCapDataset(train_dataset_path, tokenizer) 
     # train_loader = DataLoader(train_dataset, batch_size=1) 
 
     for epoch in range(1, epochs+1): 

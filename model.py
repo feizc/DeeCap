@@ -5,9 +5,9 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss, MSELoss 
 
 
-class SE2Model(GPT2PreTrainedModel): 
+class DeeCapModel(GPT2PreTrainedModel): 
     def __init__(self, config): 
-        super(SE2Model, self).__init__(config) 
+        super(DeeCapModel, self).__init__(config) 
         self.transformer = GPT2Model(config) 
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
         self.img_ff = nn.Linear(2048, config.n_embd) 
