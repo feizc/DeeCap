@@ -2,6 +2,7 @@ from transformers import *
 import math 
 import torch 
 import torch.nn as nn 
+import torch.nn.functional as F 
 from torch.nn import CrossEntropyLoss, MSELoss 
 from typing import List 
 
@@ -45,7 +46,7 @@ class ModelSequence(GPT2PreTrainedModel):
         super(ModelSequence, self).__init__(config) 
         
         self.vocab_size = config.vocab_size 
-        self.threshold = 1.0 
+        self.threshold = 0.01 
 
         self.img_ff = nn.Linear(2048, config.n_embd) 
         self.img_inverse_ff = nn.Linear(config.n_embd, 2048) 
@@ -95,4 +96,12 @@ class ModelSequence(GPT2PreTrainedModel):
             outputs = outputs[0] 
             logits = lm_head(outputs) 
             sequence_logits.append(logits) 
+        
+        if labels is not None: 
+            for i, logits in enumerate(sequence_logits): 
+                token_logits = logits[-1, :]
+                prob = F.softmax(token_logits, dim=-1) 
+                confidence, _ = torch.max(prob, dim=-1) 
+                if confidence > self.threshold: 
+                    return logits 
 

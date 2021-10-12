@@ -5,7 +5,7 @@ import json
 import numpy as np 
 from torch.utils.data import DataLoader 
 
-from model import DeeCapModel 
+from model import DeeCapModel, ModelSequence 
 from dataset import DeeCapDataset 
 from utils import accuracy_compute, AverageMeter 
 
@@ -27,7 +27,7 @@ gradient_accumulation_steps = 1
 print_freq = 1 
 
 
-def main(): 
+def main_single(): 
     if ckpt_usage == True: 
         ckpt_path = '' 
     else: 
@@ -35,9 +35,6 @@ def main():
         model = DeeCapModel.from_pretrained(gpt_model_path) 
         tokenizer.add_special_tokens(SPECIAL_TOKENS_DICT) 
         model.resize_token_embeddings(len(tokenizer)) 
-    model = model.to(device) 
-    optimizer = AdamW(model.parameters(), lr=lr) 
-
     
     model = model.to(device) 
     optimizer = AdamW(model.parameters(), lr=lr) 
@@ -46,7 +43,7 @@ def main():
     # train_loader = DataLoader(train_dataset, batch_size=1) 
 
     for epoch in range(1, epochs+1): 
-        train(model=model, tokenizer=tokenizer, optimizer=optimizer, dataset=train_dataset, epoch=epoch) 
+        train_single(model=model, tokenizer=tokenizer, optimizer=optimizer, dataset=train_dataset, epoch=epoch) 
     
         torch.save({'model':model.state_dict(), 'optimizer': optimizer.state_dict()},\
             '%s/epoch_%d'%(ckpt_model_path, epoch))
@@ -54,7 +51,7 @@ def main():
         tokenizer.save_vocabulary(ckpt_model_path)
 
 
-def train(model, tokenizer, optimizer, dataset, epoch): 
+def train_single(model, tokenizer, optimizer, dataset, epoch): 
     model.train() 
     iteration = 1 
     avg_loss =  AverageMeter() 
@@ -100,11 +97,47 @@ def train(model, tokenizer, optimizer, dataset, epoch):
         break 
 
 
+def main_sequence(): 
+     
+     # load data 
+    tokenizer = GPT2Tokenizer.from_pretrained(gpt_model_path, do_lower_case=True) 
+    # tokenizer.add_special_tokens(SPECIAL_TOKENS_DICT) 
+    # model.resize_token_embeddings(len(tokenizer)) 
+
+    train_dataset = DeeCapDataset(train_dataset_path, tokenizer) 
+    config = AutoConfig.from_pretrained(gpt_model_path) 
+    
+    # model initilize 
+    model_sequence_path = ['model/origin_gpt', 'model/origin_gpt', 'model/origin_gpt'] 
+    
+    base_models = [GPT2Model.from_pretrained(
+        model_path,
+        config=config,
+    ) for model_path in model_sequence_path] 
+
+    model = ModelSequence(config, base_models=base_models) 
+    
+    optimizer = AdamW(model.parameters(), lr=lr) 
+
+    for epoch in range(1, epochs+1): 
+        train_sequence(model=model, tokenizer=tokenizer, optimizer=optimizer, dataset=train_dataset, epoch=epoch)
 
 
 
+def train_sequence(model, tokenizer, optimizer, dataset, epoch): 
+    model.train() 
 
+    for instance in dataset: 
+        instance = tuple(input_tensor.to(device) for input_tensor in instance)
+        img_features, input_ids, token_type_ids, lm_labels = instance 
+        input_emb = model.base_models[0].wte(input_ids)
+        img_emb = model.img_ff(img_features)
+        input_embs = torch.cat([img_emb, input_emb], dim=-2) 
+
+        model(input_embs, token_type_ids=token_type_ids, labels=lm_labels) 
+        
+        break 
 
 
 if __name__ == '__main__': 
-    main()
+    main_sequence()
