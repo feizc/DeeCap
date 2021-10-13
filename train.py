@@ -58,7 +58,9 @@ def train_single(model, tokenizer, optimizer, dataset, epoch):
     avg_acc = AverageMeter() 
 
     for instance in dataset: 
-        instance = tuple(input_tensor.to(device) for input_tensor in instance)
+        if iteration == 10: 
+            break 
+        instance = tuple(input_tensor.to(device) for input_tensor in instance) 
         img_features, input_ids, token_type_ids, lm_labels = instance 
         input_emb = model.transformer.wte(input_ids)
         img_emb = model.img_ff(img_features)
@@ -94,7 +96,7 @@ def train_single(model, tokenizer, optimizer, dataset, epoch):
         iteration += 1 
 
 
-        break 
+        
 
 
 def main_sequence(): 
@@ -140,4 +142,4 @@ def train_sequence(model, tokenizer, optimizer, dataset, epoch):
 
 
 if __name__ == '__main__': 
-    main_sequence()
+    main_single()
