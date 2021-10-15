@@ -53,7 +53,10 @@ class ModelSequence(GPT2PreTrainedModel):
 
         self.base_models = nn.ModuleList(base_models) 
         self.lm_heads = nn.ModuleList([nn.Linear(config.n_embd, config.vocab_size, bias=False)
-                                        for _ in range(len(base_models))])
+                                        for _ in range(len(base_models))]) 
+        self.margin_loss_weight = margin_loss_weight 
+        self.margin_loss = nn.MarginRankingLoss(margin=confidence_margin) 
+
         self.init_params() 
 
     def init_params(self):
@@ -65,6 +68,31 @@ class ModelSequence(GPT2PreTrainedModel):
     
     def set_threshold(self, threshold):
         self.threshold = threshold 
+
+    def set_margin_loss_weight(self, margin_loss_weight):
+        self.margin_loss_weight = margin_loss_weight 
+
+    def pair_loss(self, difficult_labels, confidence, dif1=0, dif2=1): 
+        easy_idx = (difficulty_labels == dif1) 
+        hard_idx = (difficult_labels == dif2) 
+        easy_conf = confidence[easy_idx] 
+        hard_conf = confidence[hard_idx] 
+
+        if len(easy_conf) == 0 or len(hard_conf) == 0:
+            return 0.0 
+        uniform = torch.ones_like(hard_conf) / len(hard_conf) 
+        sampled_hard_idx = torch.multinomial(uniform, num_samples=len(easy_conf), replacement=True) 
+
+        rank_input1 = easy_conf
+        rank_input2 = hard_conf[sampled_hard_idx]
+        diff_label1 = 1.0 / (1.0 + difficulty_labels[easy_idx])  # 1.0
+        diff_label2 = 1.0 / (1.0 + difficulty_labels[hard_idx][sampled_hard_idx])  # 0.5
+
+        geq = torch.where(diff_label1 >= diff_label2, torch.ones_like(diff_label1), torch.zeros_like(diff_label1))
+        less = torch.where(diff_label1 < diff_label2, -1 * torch.ones_like(diff_label2), torch.zeros_like(diff_label2))
+        target = geq + less
+        confidence_loss = self.margin_loss(rank_input1, rank_input2, target)
+        return confidence_loss
 
     def forward(
         self,
