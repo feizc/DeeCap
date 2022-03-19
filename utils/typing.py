@@ -1,4 +1,5 @@
-from typing import Union, Sequence, Tuple
+from typing import Union, Sequence
+
 import torch
 
 TensorOrSequence = Union[Sequence[torch.Tensor], torch.Tensor]

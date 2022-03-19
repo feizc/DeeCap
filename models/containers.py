@@ -27,7 +27,8 @@ class Module(nn.Module):
 
     def apply_to_states(self, fn):
         for name in self._state_names:
-            self._buffers[name] = fn(self._buffers[name])
+            if self._buffers[name] is not None:
+                self._buffers[name] = fn(self._buffers[name])
         for m in self.children():
             if isinstance(m, Module):
                 m.apply_to_states(fn)

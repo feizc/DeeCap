@@ -1,5 +1,7 @@
-from .utils import download_from_url
+from .logger import *
 from .typing import *
+from .utils import *
+
 
 def get_batch_size(x: TensorOrSequence) -> int:
     if isinstance(x, torch.Tensor):

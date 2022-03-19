@@ -5,7 +5,7 @@ from torch.nn import functional as F
 
 def position_embedding(input, d_model):
     input = input.view(-1, 1)
-    dim = torch.arange(d_model // 2, dtype=torch.float32, device=input.device).view(1, -1)
+    dim = torch.arange(d_model // 2, dtype=input.dtype, device=input.device).view(1, -1)
     sin = torch.sin(input / 10000 ** (2 * dim / d_model))
     cos = torch.cos(input / 10000 ** (2 * dim / d_model))
 
@@ -15,8 +15,8 @@ def position_embedding(input, d_model):
     return out
 
 
-def sinusoid_encoding_table(max_len, d_model, padding_idx=None):
-    pos = torch.arange(max_len, dtype=torch.float32)
+def sinusoid_encoding_table(max_len, d_model, padding_idx=None, dtype=torch.float32):
+    pos = torch.arange(max_len, dtype=dtype)
     out = position_embedding(pos, d_model)
 
     if padding_idx is not None:
@@ -25,9 +25,9 @@ def sinusoid_encoding_table(max_len, d_model, padding_idx=None):
 
 
 class PositionWiseFeedForward(nn.Module):
-    '''
+    """
     Position-wise feed forward layer
-    '''
+    """
 
     def __init__(self, d_model=512, d_ff=2048, dropout=.1, identity_map_reordering=False):
         super(PositionWiseFeedForward, self).__init__()

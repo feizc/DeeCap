@@ -15,7 +15,7 @@ class BeamSearch(object):
         self.outputs = None
         self.log_probs = None
         self.selected_words = None
-        self.all_log_probs = None
+        self.all_logits = None
 
     def _expand_state(self, selected_beam, cur_beam_size):
         def fn(s):
@@ -55,20 +55,20 @@ class BeamSearch(object):
             visual = tuple(new_visual)
         return visual
 
-    def apply(self, visual: utils.TensorOrSequence, out_size=1, return_probs=False, **kwargs):
+    def apply(self, visual: utils.TensorOrSequence, out_size=1, return_logits=False, **kwargs):
         self.b_s = utils.get_batch_size(visual)
         self.device = utils.get_device(visual)
         self.seq_mask = torch.ones((self.b_s, self.beam_size, 1), device=self.device)
         self.seq_logprob = torch.zeros((self.b_s, 1, 1), device=self.device)
         self.log_probs = []
         self.selected_words = None
-        if return_probs:
-            self.all_log_probs = []
+        if return_logits:
+            self.all_logits = []
 
         outputs = []
         with self.model.statefulness(self.b_s):
             for t in range(self.max_len):
-                visual, outputs = self.iter(t, visual, outputs, return_probs, **kwargs)
+                visual, outputs = self.iter(t, visual, outputs, return_logits, **kwargs)
 
         # Sort result
         seq_logprob, sort_idxs = torch.sort(self.seq_logprob, 1, descending=True)
@@ -76,20 +76,24 @@ class BeamSearch(object):
         outputs = torch.gather(outputs, 1, sort_idxs.expand(self.b_s, self.beam_size, self.max_len))
         log_probs = torch.cat(self.log_probs, -1)
         log_probs = torch.gather(log_probs, 1, sort_idxs.expand(self.b_s, self.beam_size, self.max_len))
-        if return_probs:
-            all_log_probs = torch.cat(self.all_log_probs, 2)
-            all_log_probs = torch.gather(all_log_probs, 1, sort_idxs.unsqueeze(-1).expand(self.b_s, self.beam_size,
-                                                                                          self.max_len,
-                                                                                          all_log_probs.shape[-1]))
-
         outputs = outputs.contiguous()[:, :out_size]
         log_probs = log_probs.contiguous()[:, :out_size]
+
+        if return_logits:
+            all_logits = torch.cat(self.all_logits, 2)
+            all_logits = torch.gather(all_logits, 1, sort_idxs.unsqueeze(-1).expand(self.b_s, self.beam_size,
+                                                                                          self.max_len,
+                                                                                          all_logits.shape[-1]))
+            all_logits = all_logits.contiguous()[:, :out_size]
+
         if out_size == 1:
             outputs = outputs.squeeze(1)
             log_probs = log_probs.squeeze(1)
+            if return_logits:
+                all_logits = all_logits.squeeze(1)
 
-        if return_probs:
-            return outputs, log_probs, all_log_probs
+        if return_logits:
+            return outputs, log_probs, all_logits
         else:
             return outputs, log_probs
 
@@ -98,16 +102,17 @@ class BeamSearch(object):
         selected_logprob, selected_idx = selected_logprob[:, :self.beam_size], selected_idx[:, :self.beam_size]
         return selected_idx, selected_logprob
 
-    def iter(self, t: int, visual: utils.TensorOrSequence, outputs, return_probs, **kwargs):
+    def iter(self, t: int, visual: utils.TensorOrSequence, outputs, return_logits, **kwargs):
         cur_beam_size = 1 if t == 0 else self.beam_size
 
-        word_logprob = self.model.step(t, self.selected_words, visual, None, mode='feedback', **kwargs)
-        word_logprob = word_logprob.view(self.b_s, cur_beam_size, -1)
+        word_logits = self.model.step(t, self.selected_words, visual, **kwargs)
+        word_logits = word_logits.view(self.b_s, cur_beam_size, -1)
+        word_logprob = torch.log_softmax(word_logits, dim=-1)
         candidate_logprob = self.seq_logprob + word_logprob
 
         # Mask sequence if it reaches EOS
         if t > 0:
-            mask = (self.selected_words.view(self.b_s, cur_beam_size) != self.eos_idx).float().unsqueeze(-1)
+            mask = (self.selected_words.view(self.b_s, cur_beam_size) != self.eos_idx).type(visual.dtype).unsqueeze(-1)
             self.seq_mask = self.seq_mask * mask
             word_logprob = word_logprob * self.seq_mask.expand_as(word_logprob)
             old_seq_logprob = self.seq_logprob.expand_as(candidate_logprob).contiguous()
@@ -115,7 +120,7 @@ class BeamSearch(object):
             candidate_logprob = self.seq_mask * candidate_logprob + old_seq_logprob * (1 - self.seq_mask)
 
         selected_idx, selected_logprob = self.select(t, candidate_logprob, **kwargs)
-        selected_beam = selected_idx / candidate_logprob.shape[-1]
+        selected_beam = torch.floor_divide(selected_idx, candidate_logprob.shape[-1])
         selected_words = selected_idx - selected_beam * candidate_logprob.shape[-1]
 
         self.model.apply_to_states(self._expand_state(selected_beam, cur_beam_size))
@@ -126,11 +131,11 @@ class BeamSearch(object):
         outputs = list(torch.gather(o, 1, selected_beam.unsqueeze(-1)) for o in outputs)
         outputs.append(selected_words.unsqueeze(-1))
 
-        if return_probs:
+        if return_logits:
             if t == 0:
-                self.all_log_probs.append(word_logprob.expand((self.b_s, self.beam_size, -1)).unsqueeze(2))
+                self.all_logits.append(word_logits.expand((self.b_s, self.beam_size, -1)).unsqueeze(2))
             else:
-                self.all_log_probs.append(word_logprob.unsqueeze(2))
+                self.all_logits.append(word_logits.unsqueeze(2))
 
         this_word_logprob = torch.gather(word_logprob, 1,
                                          selected_beam.unsqueeze(-1).expand(self.b_s, self.beam_size,

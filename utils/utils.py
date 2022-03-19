@@ -1,4 +1,23 @@
+import sys
+import os
+import shutil
+import warnings
 import requests
+import pidfile
+from contextlib import contextmanager
+from time import sleep
+
+@contextmanager
+def exclusive(pidname):
+    done = False
+    while not done:
+        try:
+            with pidfile.PIDFile(pidname):
+                yield
+                done = True
+        except pidfile.AlreadyRunningError:
+            sleep(5)
+
 
 def download_from_url(url, path):
     """Download file, with logic (from tensor2tensor) for Google Drive"""
@@ -25,3 +44,15 @@ def download_from_url(url, path):
         for chunk in response.iter_content(chunk_size):
             if chunk:
                 f.write(chunk)
+
+
+class DummyFile(object):
+    def write(self, x): pass
+
+
+@contextmanager
+def nostdout():
+    save_stdout = sys.stdout
+    sys.stdout = DummyFile()
+    yield
+    sys.stdout = save_stdout

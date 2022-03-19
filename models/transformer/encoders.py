@@ -1,5 +1,5 @@
 from torch.nn import functional as F
-from models.transformer.utils import PositionWiseFeedForward
+from models.transformer.utils import sinusoid_encoding_table, PositionWiseFeedForward
 import torch
 from torch import nn
 from models.transformer.attention import MultiHeadAttention
@@ -21,10 +21,12 @@ class EncoderLayer(nn.Module):
         return ff
 
 
-class MultiLevelEncoder(nn.Module):
-    def __init__(self, N, padding_idx, d_model=512, d_k=64, d_v=64, h=8, d_ff=2048, dropout=.1,
-                 identity_map_reordering=False, attention_module=None, attention_module_kwargs=None):
-        super(MultiLevelEncoder, self).__init__()
+class Encoder(nn.Module):
+    def __init__(self, N=3, max_len=16, d_in=512, d_model=512, d_k=64, d_v=64, h=8, d_ff=2048, dropout=.1,
+                 identity_map_reordering=False, attention_module=None, attention_module_kwargs=None,
+                 with_pe=False, with_mesh=False):
+        super(Encoder, self).__init__()
+        self.d_in = d_in
         self.d_model = d_model
         self.dropout = dropout
         self.layers = nn.ModuleList([EncoderLayer(d_model, d_k, d_v, h, d_ff, dropout,
@@ -32,31 +34,32 @@ class MultiLevelEncoder(nn.Module):
                                                   attention_module=attention_module,
                                                   attention_module_kwargs=attention_module_kwargs)
                                      for _ in range(N)])
-        self.padding_idx = padding_idx
-
-    def forward(self, input, attention_weights=None):
-        # input (b_s, seq_len, d_in)
-        attention_mask = (torch.sum(input, -1) == self.padding_idx).unsqueeze(1).unsqueeze(1)  # (b_s, 1, 1, seq_len)
-
-        outs = []
-        out = input
-        for l in self.layers:
-            out = l(out, out, out, attention_mask, attention_weights)
-            outs.append(out.unsqueeze(1))
-
-        outs = torch.cat(outs, 1)
-        return outs, attention_mask
-
-
-class MemoryAugmentedEncoder(MultiLevelEncoder):
-    def __init__(self, N, padding_idx, d_in=2048, **kwargs):
-        super(MemoryAugmentedEncoder, self).__init__(N, padding_idx, **kwargs)
+        self.pos_emb = nn.Embedding.from_pretrained(sinusoid_encoding_table(max_len + 1, self.d_in, 0), freeze=True)
         self.fc = nn.Linear(d_in, self.d_model)
         self.dropout = nn.Dropout(p=self.dropout)
         self.layer_norm = nn.LayerNorm(self.d_model)
+        self.with_pe = with_pe
+        self.with_mesh = with_mesh
 
-    def forward(self, input, attention_weights=None):
-        out = F.relu(self.fc(input))
+    def forward(self, input):
+        # input (b_s, seq_len, d_in)
+        b_s, seq_len = input.shape[:2]
+        seq = torch.arange(1, seq_len + 1, device=input.device).view(1, -1).expand(b_s, -1)  # (b_s, seq_len)
+
+        out = input
+        if self.with_pe:
+            out = out + self.pos_emb(seq)
+        out = F.relu(self.fc(out))
         out = self.dropout(out)
         out = self.layer_norm(out)
-        return super(MemoryAugmentedEncoder, self).forward(out, attention_weights=attention_weights)
+        outs = list()
+        for l in self.layers:
+            out = l(out, out, out)
+            if self.with_mesh:
+                outs.append(out.unsqueeze(1))
+
+        if self.with_mesh:
+            outs = torch.cat(outs, 1)
+            return outs, None
+        return out, None
+
