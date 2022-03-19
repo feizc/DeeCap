@@ -64,10 +64,11 @@ class DecoderLayer(Module):
         self.pwff = PositionWiseFeedForward(d_model, d_ff, dropout)
 
     def forward(self, input, enc_output, mask_pad, mask_self_att, mask_enc_att):
-        self_att = self.self_att(input, input, input, mask_self_att)
+        self_att = self.self_att(input, input, input, mask_self_att) 
         enc_att = self.enc_att(self_att, enc_output, enc_output, mask_enc_att)
         ff = self.pwff(enc_att)
         ff = ff * mask_pad
+
         return ff
 
 
@@ -136,7 +137,7 @@ class MeshedDecoder(Module):
 
 
 class Decoder(Module):
-    def __init__(self, vocab_size=50257, max_len=40, N_dec=3, padding_idx=0, d_model=512, d_k=64, d_v=64, h=8, d_ff=2048,
+    def __init__(self, vocab_size=50257, max_len=40, N_dec=6, padding_idx=0, d_model=512, d_k=64, d_v=64, h=8, d_ff=2048,
                  dropout=.1, self_att_module=None, enc_att_module=None, self_att_module_kwargs=None,
                  enc_att_module_kwargs=None):
         super(Decoder, self).__init__()

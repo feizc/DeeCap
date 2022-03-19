@@ -5,6 +5,8 @@ from .transformer import Encoder, Decoder, ScaledDotProductAttentionMemory, Mesh
 from .containers import Module
 from .beam_search import * 
 
+
+# original transformer image captioning model 
 class TICModel(Module): 
     def __init__(self, config):
         super(TICModel, self).__init__() 

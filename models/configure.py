@@ -1,4 +1,4 @@
-# parameters configuration for network 
+# parameters configuration for transformer image captioning model 
 
 class TransformerConfig:
     def __init__(

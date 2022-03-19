@@ -22,7 +22,7 @@ class EncoderLayer(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, N=3, max_len=16, d_in=512, d_model=512, d_k=64, d_v=64, h=8, d_ff=2048, dropout=.1,
+    def __init__(self, N=6, max_len=16, d_in=512, d_model=512, d_k=64, d_v=64, h=8, d_ff=2048, dropout=.1,
                  identity_map_reordering=False, attention_module=None, attention_module_kwargs=None,
                  with_pe=False, with_mesh=False):
         super(Encoder, self).__init__()
