@@ -12,7 +12,7 @@ the zip file containing the annotations ([annotations_trainval2014.zip](http://i
 
 ## Training Procedure 
 
-Run `python train.py` using the following arguments: 
+Run `python train_deecap.py` using the following arguments: 
 
 | Argument | Possible values |
 |------|------|
