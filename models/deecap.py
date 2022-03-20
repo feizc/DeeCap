@@ -12,6 +12,7 @@ def entropy(x):
 
 
 
+
 class DeeCapPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -28,7 +29,7 @@ class DeeCapPooler(nn.Module):
 
 
 
-class InternalClassifier(nn.Module): 
+class ImitationNet(nn.Module): 
     def __init__(self, config):
         super().__init__()
         self.weight = nn.Parameter(torch.zeros(config.n_layer, config.n_embd, config.n_embd).
@@ -37,8 +38,32 @@ class InternalClassifier(nn.Module):
         self.act = nn.Tanh()
 
     def forward(self, hidden_representation):
-        confidence_pred = self.act(hidden_representation.matmul(self.weight).permute(1, 0, 2) + self.bias)
-        return confidence_pred
+        approximate_representation = self.act(hidden_representation.matmul(self.weight).permute(1, 0, 2) + self.bias)
+        return approximate_representation
+
+
+
+
+class InternelClassifierWithGate(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        self.proj_act = nn.Tanh()
+        self.gate_proj = nn.Linear(config.n_embd, config.n_embd)
+        self.gate_act = nn.Sigmoid()
+
+    def forward(self, hidden_representation, current_layer):  # hidden_representation (bsz, num_layers, hidden_size)
+        
+        prev_logits = torch.sum(hidden_representation[:, :current_layer+1, :], dim=1)
+        future_logits = torch.sum(hidden_representation[:, current_layer+1:, :], dim=1)
+
+        prev_gate = self.proj_act(torch.sum(hidden_representation[:, :current_layer+1, :], dim=1) / (current_layer + 1))
+        prev_lamb = self.gate_act(self.gate_proj(prev_gate))
+
+        _logits = 2 * prev_lamb * prev_logits + (2 - 2 * prev_lamb) * future_logits
+
+        return _logits
 
 
 
@@ -165,8 +190,9 @@ class DeeCapModel(Module):
         self.feature_project = nn.Linear(config.clip_dim, config.clip_length*config.n_embd) 
         self.visual_encoder = Encoder(config.n_layer, config.clip_length, config.n_embd) 
         self.language_decoder = DeeCapDecoder(config.vocab_size, N_dec=config.n_layer) 
-        self.internal_classifier = InternalClassifier(config) 
-        self.poolers = nn.ModuleList([DeeCapPooler(config) for _ in range(config.n_layer)])
+        self.imitation_net = ImitationNet(config) 
+        self.poolers = nn.ModuleList([DeeCapPooler(config) for _ in range(config.n_layer)]) 
+        self.fusion_net = InternelClassifierWithGate(config)
 
         self.bos_idx = config.bos_token_id 
         self.eos_idx = config.eos_token_id 
@@ -174,8 +200,8 @@ class DeeCapModel(Module):
         self.max_generation_length = self.language_decoder.max_len 
         self.freezed_lower_layer = 3 
 
-        self.confidence_tokens = [] 
-        self.confidence_tokens_proj = [] 
+        self.hidden_states_list = [] 
+        self.hidden_states_proj_list = [] 
 
         self.register_state('enc_output', None)
         self.register_state('mask_enc', None)
@@ -195,14 +221,14 @@ class DeeCapModel(Module):
         images = self.feature_project(images).view(-1, self.clip_length, self.clip_dim)
         enc_output, mask_enc = self.visual_encoder(images) 
 
-        self.confidence_tokens.clear() 
-        self.confidence_tokens_proj.clear() 
-
-        # dec_output = self.language_decoder(seq, enc_output, mask_enc)
+        self.hidden_states_list.clear() 
+        self.hidden_states_proj_list.clear() 
 
         hidden_states, mask_queries, mask_self_attention = self.language_decoder.word_forward(seq) 
-        # (bsz, seq_len, model_d)
-        res = [] 
+        # (bsz, seq_len, model_d) 
+
+        res = []  
+        all_pool = [] 
         for i in range(self.config.n_layer): 
             
             hidden_states = self.language_decoder.adaptive_forward(hidden_states, i, enc_output, mask_queries, mask_self_attention, mask_enc)
@@ -211,9 +237,24 @@ class DeeCapModel(Module):
             pooled_output = self.poolers[i](hidden_states)
             confidence_token = pooled_output 
 
-            self.confidence_tokens.append(confidence_token.detach())
-            self.confidence_tokens_proj.append(self.internal_classifier(confidence_token))
-        
+            self.hidden_states_list.append(confidence_token.detach())
+            # approximate high-level hidden representation
+            self.hidden_states_proj_list.append(self.imitation_net(confidence_token)) 
+
+            if all_pool: 
+                all_pool[-1] = all_pool[-1].detach() 
+            all_pool.append(pooled_output) 
+            pooled_output = torch.stack(all_pool, dim=1) 
+            
+            # last year does not incorporate hidden representation prediction 
+            if i < self.config.n_layer - 1:
+                pred_hidden_representation = self.hidden_states_proj_list[-1][:, i+1, :]
+                pred_hidden_representation = pred_hidden_representation.unsqueeze(1)
+                pooled_output = torch.cat([pooled_output, pred_hidden_representation], dim=1)   #reshape(pooled_output.shape[0], -1)
+
+            logits = self.language_decoder.fc(self.fusion_net(pooled_output, i))
+            res.append(logits)
+
         return res
 
     
