@@ -129,7 +129,8 @@ def train_scst(model, train_dataloader, cider_train, args, optimizer, scheduler,
 
 def main(): 
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', default='./data/train.pkl') 
+    parser.add_argument('--train_data_path', default='./data/train.pkl') 
+    parser.add_argument('--test_data_path', default='./data/test.pkl') 
     parser.add_argument('--tokenizer_path', default='./ckpt/gpt2') 
     parser.add_argument('--batch_size', default=5) 
     parser.add_argument('--lr', default=1e-2) 
@@ -137,13 +138,16 @@ def main():
     parser.add_argument('--warmup_steps', default=5000) 
     parser.add_argument('--out_dir', default='./ckpt') 
     parser.add_argument('--model_type', default='tic') 
-    parser.add_argument('--phase', type=str, default='xe', choices=('xe', 'scst'))
+    parser.add_argument('--phase', type=str, default='xs', choices=('xe', 'scst'))
     args = parser.parse_args()
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.tokenizer_path) 
-    dataset = ClipCocoDataset(args.data_path, tokenizer) 
-    train_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
-    ref_caps_train = list(tokenizer.decode(text) for text in dataset.captions_tokens) 
+    train_dataset = ClipCocoDataset(args.train_data_path, tokenizer)  
+    test_dataset = ClipCocoDataset(args.test_data_path, tokenizer)  
+
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, drop_last=False)
+    ref_caps_train = list(tokenizer.decode(text) for text in test_dataset.captions_tokens) 
     cider_train = Cider(PTBTokenizer.tokenize(ref_caps_train)) 
 
     config = TransformerConfig()
@@ -154,7 +158,7 @@ def main():
         optimizer, num_warmup_steps=args.warmup_steps, num_training_steps=args.epochs * len(train_dataloader)
     ) 
 
-    use_rl = False 
+    use_rl = False
     best_cider = .0 
     patience = 0 
 
@@ -165,7 +169,7 @@ def main():
         else:
             train_loss, reward, reward_baseline = train_scst(model, train_dataloader, cider_train, args, optimizer, scheduler, epoch, tokenizer)
         
-        scores = evaluate_metrics(model, train_dataloader, tokenizer, epoch)
+        scores = evaluate_metrics(model, test_dataloader, tokenizer, epoch)
         val_cider = scores['CIDEr'] 
 
         best = False 
@@ -195,8 +199,6 @@ def main():
             os.path.join(args.out_dir, f"{args.model_type}-{epoch:02d}.pt")
         )
         break 
-
-
 
 
 

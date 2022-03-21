@@ -57,10 +57,11 @@ def LayerWeightLoss(model, outputs, labels, args):
     return total_loss / total_weights + cos_loss_total 
 
 
+
 def train(model, train_dataloader, args, optimizer, scheduler, epoch):
     model.train()
     running_loss = .0 
-    print('Num Epochs = ', epoch)
+    print('Num Training Epochs = ', epoch)
     progress = tqdm(total=len(train_dataloader), desc='DeeCapModel') 
     for idx, (tokens, _, img_features) in enumerate(train_dataloader):  
         model.zero_grad() 
@@ -80,13 +81,32 @@ def train(model, train_dataloader, args, optimizer, scheduler, epoch):
 
 
 
+def evaluate_loss(model, test_dataloader, args): 
+    model.eval() 
+    running_loss = .0 
+    progress = tqdm(total=len(test_dataloader), desc='DeeCapModel') 
+    with torch.no_grad():
+        for idx, (tokens, _, img_features) in enumerate(test_dataloader):  
+            tokens, img_features = tokens.to(device), img_features.to(device, dtype=torch.float32) 
+            outputs = model(img_features, tokens) 
+            loss = LayerWeightLoss(model, outputs, tokens, args)
+        
+            running_loss += loss.item()
+            progress.set_postfix({"loss": running_loss / (idx + 1)})
+            progress.update() 
+    val_loss = running_loss / len(test_dataloader) 
+    return val_loss 
+
+
+
 def main(): 
     parser = argparse.ArgumentParser() 
-    parser.add_argument('--data_path', default='./data/train.pkl') 
+    parser.add_argument('--train_data_path', default='./data/train.pkl')
+    parser.add_argument('--test_data_path', default='./data/test.pkl')
     parser.add_argument('--tokenizer_path', default='./ckpt/gpt2') 
     parser.add_argument('--batch_size', default=5) 
-    parser.add_argument('--lr', default=1e-3) 
-    parser.add_argument('--epochs', default=1) 
+    parser.add_argument('--lr', default=1e-4) 
+    parser.add_argument('--epochs', default=8) 
     parser.add_argument('--warmup_steps', default=5000) 
     parser.add_argument('--out_dir', default='./ckpt') 
     parser.add_argument('--model_type', default='deecap') 
@@ -94,8 +114,10 @@ def main():
     args = parser.parse_args() 
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.tokenizer_path) 
-    dataset = ClipCocoDataset(args.data_path, tokenizer) 
-    train_dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, drop_last=True) 
+    train_dataset = ClipCocoDataset(args.train_data_path, tokenizer) 
+    test_dataset = ClipCocoDataset(args.test_data_path, tokenizer) 
+    train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True) 
+    test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, drop_last=False) 
 
     config = TransformerConfig()
     model = DeeCapModel(config).to(device) 
@@ -106,8 +128,14 @@ def main():
     ) 
 
     for epoch in range(args.epochs): 
-        train(model, train_dataloader, args, optimizer, scheduler, epoch)
+        train(model, train_dataloader, args, optimizer, scheduler, epoch) 
+        val_loss = evaluate_loss(model, test_dataloader, args)
 
+        torch.save(
+            model.state_dict(),
+            os.path.join(args.out_dir, '%s_last.pth' %args.model_type)
+        )
+        break 
 
 
 
