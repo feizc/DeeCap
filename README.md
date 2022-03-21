@@ -8,7 +8,7 @@ This repository includes the reference code for paper: Dynamic Early Exit for Ef
 To run the code, annotations and images for the COCO dataset are needed.
 Please download the zip files including the images ([train2014.zip](http://images.cocodataset.org/zips/train2014.zip), [val2014.zip](http://images.cocodataset.org/zips/val2014.zip)),
 the zip file containing the annotations ([annotations_trainval2014.zip](http://images.cocodataset.org/annotations/annotations_trainval2014.zip)) and extract them. These paths will be set as arguments later. 
-Our code supports the image features extracted from conventional Faster-RCNN or [CLIP](https://github.com/openai/CLIP) model.
+Our code supports the image features extracted from conventional [Faster-RCNN](https://drive.google.com/file/d/1MV6dSnqViQfyvgyHrmAT_lLpFbkzp3mx/view) or [CLIP](https://github.com/openai/CLIP) model.
 
 
 ## Training Procedure 
