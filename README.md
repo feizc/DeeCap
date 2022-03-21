@@ -37,7 +37,7 @@ Run `python test.py` using the following arguments:
 
 
 ## Acknowledgment
-This repository refers to [github](https://github.com/aimagelab/meshed-memory-transformer) and [huggingface](https://github.com/huggingface/transformers).
+This repository refers to [Transformer Image Captioning](https://github.com/aimagelab/meshed-memory-transformer) and [huggingface DeeBERT](https://github.com/huggingface/transformers/tree/master/examples/research_projects/deebert).
 
 
 
