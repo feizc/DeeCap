@@ -203,6 +203,11 @@ class DeeCapModel(Module):
         self.hidden_states_list = [] 
         self.hidden_states_proj_list = [] 
 
+        # compute the acceleration ration 
+        self.patience = config.patience
+        self.inference_words_num = 0 
+        self.inference_layers_num = 0
+
         self.register_state('enc_output', None)
         self.register_state('mask_enc', None)
         self.init_weights() 
@@ -262,7 +267,55 @@ class DeeCapModel(Module):
 
         return res
 
-    
+
+    def step(self, images, prev_seq): 
+        bsz, seq_len = prev_seq.size()[:2]
+
+        images = self.feature_project(images).view(-1, self.clip_length, self.clip_dim)
+        enc_output, mask_enc = self.visual_encoder(images) 
+
+        self.hidden_states_list.clear() 
+        self.hidden_states_proj_list.clear() 
+        all_pool = []
+
+        hidden_states, mask_queries, mask_self_attention = self.language_decoder.word_forward(prev_seq) 
+        calculated_layer_num = 0 
+        patient_result = None
+
+        for i in range(self.config.n_layer): 
+            calculated_layer_num += 1 
+            hidden_states = self.language_decoder.adaptive_forward(hidden_states, i, enc_output, mask_queries, mask_self_attention, mask_enc)
+            # (bsz, seq_len, model_d)
+            pooled_output = self.poolers[i](hidden_states) 
+            confidence_token = pooled_output 
+
+            self.hidden_states_proj_list.append(self.imitation_net(confidence_token.view(-1, self.config.n_embd)).contiguous().view(bsz, seq_len, self.config.n_layer, -1)) 
+
+            all_pool.append(pooled_output) 
+            pooled_output = torch.stack(all_pool, dim=2) 
+
+            if i < self.config.n_layer - 1:
+                pred_hidden_representation = self.hidden_states_proj_list[-1][:, :, i+1, :]
+                pred_hidden_representation = pred_hidden_representation.unsqueeze(2)
+                pooled_output = torch.cat([pooled_output, pred_hidden_representation], dim=2)   #reshape(pooled_output.shape[0], -1) 
+                # (bsz, seq_len, layer, d_model)
+            logits = self.language_decoder.fc(self.fusion_net(pooled_output, i))[:, -1, :] 
+            prob = torch.nn.functional.softmax(logits, dim=1) 
+            entropy = -torch.sum(prob * torch.log(prob), dim=1) 
+            patient_result = logits
+
+            # bsz = 1 for testing image-text pair
+            if torch.all((entropy) < self.patience):
+                break 
+        self.inference_layers_num += calculated_layer_num 
+        self.inference_words_num += 1
+        return logits
+
+
+
+
+
+
 
 
 

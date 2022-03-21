@@ -17,6 +17,7 @@ class TransformerConfig:
         attn_pdrop=0.1,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+        patience=0.5,
         summary_type="cls_index",
         summary_use_proj=True,
         summary_activation=None,
@@ -52,6 +53,7 @@ class TransformerConfig:
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.patience = patience
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
