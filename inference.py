@@ -56,8 +56,6 @@ def beam_search(img_features, model, tokenizer, max_length=25, beam_size=5):
     maxhyps = sorted(hyplist, key=lambda h: -h[1])[:1]
     print(maxhyps)
 
- 
-
 
 
 def generate_caption(model, tokenizer, data): 
