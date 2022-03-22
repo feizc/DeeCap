@@ -24,6 +24,8 @@ Run `python train_deecap.py` using the following arguments:
 | `--tokenizer_path` | Path to the tokenizer |
 | `--out_dir` | Path to the saved checkpoint |
 | `--batch_size` | Batch size (default: 10) |
+| `--lr` | Learning rate (default: 1e-4) |
+
 
 
 
