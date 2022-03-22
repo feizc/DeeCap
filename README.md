@@ -17,10 +17,14 @@ Run `python train_deecap.py` using the following arguments:
 
 | Argument | Possible values |
 |------|------|
-| `--exp_name` | Experiment name|
+| `--exp_name` | Experiment name (default: deecap)|
+| `--train_data_path` | Path to the training dataset |
+| `--features_path` | Path to detection features file (optional) |
+| `--annotation_folder` | Path to folder with annotations (optional) |
+| `--tokenizer_path` | Path to the tokenizer |
+| `--out_dir` | Path to the saved checkpoint |
 | `--batch_size` | Batch size (default: 10) |
-| `--features_path` | Path to detection features file |
-| `--annotation_folder` | Path to folder with COCO annotations |
+
 
 
 
