@@ -10,7 +10,8 @@ from tqdm import tqdm
 
 from models.transformer import Encoder, Decoder
 from models import entropy, DeeCapModel, TransformerConfig 
-from dataset import ClipCocoDataset
+from dataset import ClipCocoDataset 
+import evaluation
 
 
 use_device = torch.cuda.is_available()
@@ -43,7 +44,8 @@ def greedy_decode(img_features, model, tokenizer):
 
 
 
-def predict_captions(model, test_dataloader, tokenizer):
+def predict_captions(model, test_dataloader, tokenizer): 
+    import itertools 
     model.eval() 
     gen = {} 
     gts = {} 
@@ -53,9 +55,17 @@ def predict_captions(model, test_dataloader, tokenizer):
             tokens, img_features = tokens.to(device), img_features.to(device, dtype=torch.float32) 
             gen_i = greedy_decode(img_features, model, tokenizer) 
             caps_gen = tokenizer.batch_decode([gen_i])
-            caps_gts = tokenizer.batch_decode(tokens) 
-            print(caps_gen, caps_gts)
-            break 
+            caps_gt = tokenizer.batch_decode(tokens) 
+            for i, (gts_i, gen_i) in enumerate(zip(caps_gt, caps_gen)):
+                gen_i = ' '.join([k for k, g in itertools.groupby(gen_i)])
+                gen['%d_%d' % (idx, i)] = [gen_i.strip(), ]
+                gts['%d_%d' % (idx, i)] = gts_i
+            progress.update() 
+            
+    gts = evaluation.PTBTokenizer.tokenize(gts)
+    gen = evaluation.PTBTokenizer.tokenize(gen)
+    scores, _ = evaluation.compute_all_scores(gts, gen)
+    return scores 
 
 
 
@@ -74,8 +84,8 @@ if __name__ == '__main__':
     config = TransformerConfig(vocab_size=len(tokenizer))
     model = DeeCapModel(config).to(device) 
     
-    predict_captions(model, test_dataloader, tokenizer)
-
+    scores = predict_captions(model, test_dataloader, tokenizer) 
+    print(scores)
 
 
     '''

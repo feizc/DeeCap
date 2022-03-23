@@ -14,6 +14,11 @@ from tqdm import tqdm
 
 
 
+SPECIAL_TOKENS = ["<bos>", "<eos>"]
+SPECIAL_TOKENS_DICT = {'bos_token': "<bos>", 'eos_token': "<eos>", }
+
+
+
 use_device = torch.cuda.is_available()
 device = torch.device('cuda:0' if use_device else 'cpu') 
 torch.backends.cudnn.benchmark = True
@@ -114,12 +119,14 @@ def main():
     args = parser.parse_args() 
 
     tokenizer = GPT2Tokenizer.from_pretrained(args.tokenizer_path) 
+    tokenizer.add_special_tokens(SPECIAL_TOKENS_DICT)
+
     train_dataset = ClipCocoDataset(args.train_data_path, tokenizer) 
     test_dataset = ClipCocoDataset(args.test_data_path, tokenizer) 
     train_dataloader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, drop_last=True) 
     test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False, drop_last=False) 
 
-    config = TransformerConfig()
+    config = TransformerConfig(vocab_size=len(tokenizer))
     model = DeeCapModel(config).to(device) 
 
     optimizer = AdamW(model.parameters(), lr=args.lr) 
