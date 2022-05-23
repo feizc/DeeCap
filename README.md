@@ -1,6 +1,8 @@
 # DeeCap
 
-This repository includes the reference code for paper: Dynamic Early Exit for Efficient Image Captioning 
+This repository includes the reference code for paper: 
+
+> **Dynamic Early Exit for Efficient Image Captioning**
 
 
 ## Data 
